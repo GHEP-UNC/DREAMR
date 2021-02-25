@@ -1,0 +1,272 @@
+;COPYRIGHT AND PERMISSION NOTICE
+;UNC Model <<DREAMR: Dynamic Representation of the Economics of AMR>>
+;Copyright (C) 2021 The University of North Carolina at Chapel Hill
+;All rights reserved.
+;
+;The University of North Carolina at Chapel Hill (“UNC”) and the developers of <<DREAMR: Dynamic Representation of the Economics of AMR>> model (“Model”) give recipient (“Recipient”) permission to
+;download a single copy of the Model and use for non-commercial purposes only provided that the following conditions are met:
+;
+;1)	Recipient may use the Model for any purpose, EXCEPT for commercial benefit.
+;2)	Recipient will not copy the Model.
+;3)	Recipient will not sell the Model.
+;4)	Recipient will not give the Model to any third party.
+;5)	Recipient may use Model in support of publications as long as UNC and its developers are recognized with appropriate attribution.
+;6)	Any party desiring a license to use the Model for commercial purposes shall contact:
+;
+;		 The Office of Technology Commercialization at UNC at 919-966-3929 or otc@unc.edu.
+;
+;THIS Model IS PROVIDED BY THE COPYRIGHT HOLDERS, CONTRIBUTORS, AND THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY
+;AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER, CONTRIBUTORS OR THE UNIVERSITY OF NORTH CAROLINA AT CHAPEL HILL BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY,
+;OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT,
+;STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS Model, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+;
+;This NetLogo file is designed to demonstrate key components of DREAMR
+;Should you have any questions, please contact Dr. Sachiko Ozawa (ozawa@unc.edu).
+
+;       *****   DREAMR Model    *****
+
+;(1) Set up agents of the model. You may want to create other agents in necessary.
+breed [children child]
+
+;(2) Set up agent-own heterogeneity. Here is the demonstration of child agents. You may want to set up agent-own heterogeneity for other agents.
+children-own [
+  urban?                              ;0=rural, 1=rural
+  age                                 ;years
+  trt-days                            ;cumulative treatment days
+  sick-days                           ;cumulative sick days for those who seek care but are not prescribed with ABX
+  #-trt                               ;cumulative frequency of treatments
+  #-self-trt                          ;cumulative frequency of self-treatments
+  #-trt-failure                       ;cumulative frequency of treatment failures due to all causes
+  #-trt-failure-pneumonia             ;cumulative frequency of treatment failures due to pneumonia
+  #-trt-failure-meningitis            ;cumulative frequency of treatment failures due to meningitis
+  #-trt-failure-aom                   ;cumulative frequency of treatment failures due to AOM
+  #-pneumonia                         ;cumulative frequency of pneumonia
+  #-meningitis                        ;cumulativefrequency of meningitis
+  #-aom                               ;cumulative frequency of AOM
+  healthy?                            ;0=no, 1=yes
+  vaccinated?                         ;0=no, 1=yes
+  meningitis?                         ;0=no, 1=yes
+  pneumonia?                          ;0=no, 1=yes
+  aom?                                ;0=no, 1=yes
+  outpatient?                         ;0=no, 1=yes
+  inpatient?                          ;0=no, 1=yes
+  facility                            ;1=municipal, 2=county, 3=town, 4=private
+  start-trt?                          ;0=no, 1=yes, -1 = non-seeking-care
+  self-medicate?                      ;0=not self-medicated, 1=self-medicated
+  misuse?                             ;0=no, 1=inappropriate use of medication
+  abx                                 ;0=no treatment, amx = amoxicillin, cfx = ceftriaxone, pcn = penicillin, mem = meropenem
+  first-line-trt?                     ;0=no, 1=yes, -1= no abx prescribed after seeking care
+  second-line-trt?                    ;0=no, 1=yes
+  die?                                ;0=no, 1=yes
+  disable?                            ;0=no, 1=yes
+  die-due-to-tf?                      ;0=no, 1=yes
+  die-during-trt?                     ;0=no, 1=yes
+]
+
+;(3) Set up global parameters. You may want to follow the manuscript to set up other global parameteres, including outcomes of interest, if necessary.
+globals [
+  %-seeking-care-urban                ;%           probability of seeking care in urban area
+  %-seeking-care-rural                ;%           probability of seeking care in rural area
+  %-self-medicate-urban               ;%           proportion of self-medication for those who do not seek care at formal facility in urban area
+  %-self-medicate-rural               ;%           proportion of self-medication for those who do not seek care at formal facility in rural area
+  %-municipal                         ;%           proportion of patients who seek care in a municipal hospital
+  %-county                            ;%           proportion of patients who seek care in a county hospital
+  %-town                              ;%           proportion of patients who seek care in a town hospitall
+  %-private                           ;%           proportion of patients who seek care in a private hospital/clinic
+  %-municipal-inp                     ;%           proportion of patients in municipal hospital get treatment in inpatient serverice
+  %-county-inp                        ;%           proportion of patients in county hospital get treatment in inpatient serverice
+  %-town-inp                          ;%           proportion of patients in township hospital get treatment in inpatient serverice
+  %-private-inp                       ;%           proportion of patients in private hospital/clinic get treatment in inpatient serverice
+  %-hospitalized-meningitis           ;%           probability of being hospitalized with meningitis
+  %-hospitalized-aom                  ;%           probability of being hospitalized with aom
+  %-amx                               ;            proportion of using amoxicillin for pneumonia treatment
+  %-amx-aom                           ;            proportion of using amoxicillin for AOM treatment
+  %-pcn                               ;            proportion of using penicillin for pneumonia treatment
+  %-pcn-aom                           ;            proportion of using penicillin for AOM treatment
+  %-cfx                               ;            proportion of using ceftriaxone for pneumonia treatment
+  %-cfx-aom                           ;            proportion of using ceftriaxone for AOM treatment
+  %-mem-m                             ;            proportion of using meropenem for meningitis treatment
+  %-misuse-formal                     ;%           proportion of inappropriate use in formal healthcare facilities
+  %-misuse-selfmed                    ;%           proportion of inappropriate use in self-medications
+]
+
+;(4) Care-seeking behavior includes seeking-care from formal facility, self-medication, and non-seeking-care
+to seek-care
+  ;(a) Urban and rural areas
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and start-trt? = 0 and self-medicate? = 0 and (pneumonia? = 1 or meningitis? = 1 or aom? = 1) ] [
+    ifelse urban? = 1 [
+      ifelse random-float 1 <= %-seeking-care-urban [
+        set start-trt? 1
+        set first-line-trt? 1
+        set #-trt (#-trt + 1)
+        set self-medicate? 0][
+        ifelse random-float 1 <= %-self-medicate-urban [
+          set start-trt? 1
+          set first-line-trt? 1
+          set #-self-trt (#-self-trt + 1)
+          set self-medicate? 1
+
+        ][
+          set start-trt? -1]
+      ]
+    ]
+    [
+      ifelse random-float 1 <= %-seeking-care-rural [
+        set start-trt? 1
+        set first-line-trt? 1
+        set #-trt (#-trt + 1)
+        set self-medicate? 0][
+        ifelse random-float 1 <= %-self-medicate-rural [
+          set start-trt? 1
+          set first-line-trt? 1
+          set #-self-trt (#-self-trt + 1)
+          set self-medicate? 1
+        ][
+          set start-trt? -1]
+      ]
+    ]
+  ]
+
+  ;(c) For meningitis patients, assume no self-medication behavior and will only seek care at formal facility
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and start-trt? = 1 and first-line-trt? = 1 and self-medicate? = 1 and meningitis? = 1 ] [
+    set self-medicate? 0
+    set #-self-trt (#-self-trt - 1)
+  ]
+
+  ;(d) For individuals who seek care but are not prescribed with antibiotics
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and start-trt? = -1 and first-line-trt? = 1 and self-medicate? = 0 and (pneumonia? = 1 or meningitis? = 1 or aom? = 1)] [
+    set start-trt? 0
+    set first-line-trt? -1
+    set #-trt (#-trt - 1)
+  ]
+
+end
+
+;(5) Assign treatment facility to those who seek care
+to trt-facilities
+
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and start-trt? = 1 and self-medicate? = 0 and first-line-trt? = 1 and outpatient? = 0 and inpatient? = 0 and facility = 0][
+    let facility-% random-float 1
+
+
+    ifelse facility-% <= %-municipal [set facility 1]
+    [
+      ifelse (facility-% > %-municipal) and (facility-% <= %-municipal + %-county) [set facility 2]
+      [
+        ifelse (facility-% > %-municipal + %-county) and (facility-% <= %-municipal + %-county + %-town ) [set facility 3]
+          [set facility 4]
+      ]
+    ]
+  ]
+end
+
+;(6) Determine whether patient who seek care will receive either inpatient or outpatient care
+to hospitalization
+  ;(a)assign pneumonia patients
+  ;(a-1) to municipal
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and pneumonia? = 1 and start-trt? = 1 and self-medicate? = 0 and first-line-trt? = 1 and inpatient? = 0 and outpatient? = 0 and facility = 1] [
+    ifelse random-float 1 < %-municipal-inp [
+      set inpatient? 1][
+      set outpatient? 1]
+  ]
+
+  ;(a-2) to county
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and pneumonia? = 1 and start-trt? = 1 and self-medicate? = 0 and first-line-trt? = 1 and inpatient? = 0 and outpatient? = 0 and facility = 2] [
+    ifelse random-float 1 < %-county-inp [
+      set inpatient? 1][
+      set outpatient? 1]
+  ]
+
+  ;(a-3) to township
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and pneumonia? = 1 and start-trt? = 1 and self-medicate? = 0 and first-line-trt? = 1 and inpatient? = 0 and outpatient? = 0 and facility = 3] [
+    ifelse random-float 1 < %-town-inp [
+      set inpatient? 1][
+      set outpatient? 1]
+  ]
+
+  ;(a-4) to private
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and pneumonia? = 1 and start-trt? = 1 and self-medicate? = 0 and first-line-trt? = 1 and inpatient? = 0 and outpatient? = 0 and facility = 4] [
+    ifelse random-float 1 < %-private-inp [
+      set inpatient? 1][
+      set outpatient? 1]
+  ]
+
+
+  ;(b)assign meningitis patients' hospitalization status
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and meningitis? = 1 and start-trt? = 1 and self-medicate? = 0 and first-line-trt? = 1 and inpatient? = 0 and outpatient? = 0] [
+    ifelse random-float 1 < %-hospitalized-meningitis [
+      set inpatient? 1][
+      set outpatient? 1]
+  ]
+
+  ;(c)assign AOM patients' hospitalization status
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and aom? = 1 and start-trt? = 1 and self-medicate? = 0 and first-line-trt? = 1 and inpatient? = 0 and outpatient? = 0] [
+    ifelse random-float 1 < %-hospitalized-aom [
+      set inpatient? 1][
+      set outpatient? 1]
+  ]
+
+end
+
+;(7) Determine the antibiotic treatment received
+to trt-regimen
+  ;(a) For those who seek care at formal facilities
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and start-trt? = 1 and self-medicate? = 0 and trt-days = 0] [
+    ;(a-1) assign patients with pneumonia to receive either amoxicillin, penicillin, or ceftriaxone
+
+    ifelse pneumonia? = 1 [
+      let abx-choice random-float 1
+      ifelse abx-choice <= %-amx [set abx "amx"] [
+        ifelse abx-choice > %-amx and abx-choice <= (%-amx + %-pcn) [set abx "pcn"] [
+          set abx "cfx" ]
+      ]
+    ]
+    [
+      ;(a-2) assign patients with meningitis to receive meropenem
+      ifelse meningitis? = 1 [
+        if random-float 1 <= %-mem-m [set abx "mem"]
+      ]
+      [
+        ;(a-3) assign patients with AOM to receive amoxicillin or penicillin or ceftriaxone
+        let abx-choice random-float 1
+        ifelse abx-choice <= %-amx-aom [set abx "amx"] [
+          ifelse abx-choice > %-amx-aom and abx-choice <= (%-amx-aom + %-pcn-aom) [set abx "pcn"] [
+            set abx "cfx" ]
+        ]
+      ]
+    ]
+  ]
+
+  ;(b) For those who self-medicate themselves
+  ;(b-1) assign patients with pneumonia to receive either amoxicillin or penicillin
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and pneumonia? = 1 and start-trt? = 1 and self-medicate? = 1 and trt-days = 0] [
+    ifelse random-float 1 <= ( %-amx / (%-amx + %-pcn) ) [set abx "amx"] [set abx "pcn"]
+  ]
+
+  ;(b-2) assign patients with AOM to receive amoxicillin or penicillin
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and aom? = 1 and start-trt? = 1 and self-medicate? = 1 and trt-days = 0] [
+    ifelse random-float 1 <= (%-amx-aom / (%-amx-aom + %-pcn-aom)) [set abx "amx"] [ set abx "pcn"]
+  ]
+
+end
+
+;(8) Set up medication noncompliance
+to inappropriate-use
+  ask children with [hidden? = false and die? = 0 and healthy? = 0 and start-trt? = 1 and first-line-trt? = 1 and second-line-trt? = 0 and trt-days = 0 ] [
+    ifelse self-medicate? = 0 [
+      ;For those seeking-care at formal facilities;
+      if random-float 1 <=  %-misuse-formal [
+        set misuse? 1
+      ]
+    ]
+    [
+      ;For those self-medicating
+      if random-float 1 <=  %-misuse-selfmed [
+        set misuse? 1
+      ]
+    ]
+  ]
+
+;(9) You may want to set up other treatment outcomes and the bacteria component if necessary.
+
+end
